@@ -1,8 +1,10 @@
 var express = require("express");
 var cors = require('cors');
+var jwt = require('jsonwebtoken');
 var app = express();
 
 var mysql = require("mysql");
+const { response } = require("express");
 var connection = mysql.createConnection({
     host: "localhost",
     user: 'root',
@@ -13,7 +15,39 @@ var connection = mysql.createConnection({
 app.use(cors());
 app.use(express.json());
 
-app.get("/bike", (req, resp) => {
+app.post('/auth', (req, resp) => {
+    var user = req.body;
+
+    connection.query("SELECT * FROM usuario WHERE nome = ? and senha = ?", [user.nome, user.senha], (err, result) => {
+        if (result.length == 0) {
+            resp.status(401);
+            resp.send({token: null, usuario: null, success: false});
+        } else {
+            var usuario = result[0];
+            let token = jwt.sign({id: usuario.nome}, 'tecbikeweb', {expiresIn: 6000});
+            resp.status(200);
+            resp.send({token: token, usuario: usuario, success: true});
+        }
+    });
+});
+
+verifica_token = (req, resp, next) => {
+    var token = req.headers['x-access-token'];
+
+    if (!token) {
+        return resp.status(401).end();
+    }
+
+    jwt.verify(token, 'tecbikeweb', (err, decoded) => {
+        if (err)
+            return resp.status(401).end();
+
+        req.usuario = decoded.id;
+        next();
+    });
+}
+
+app.get("/bike", verifica_token, (req, resp) => {
     console.log("GET - Bike");
 
     connection.query("SELECT * FROM bike", (err, result) => {
@@ -28,7 +62,7 @@ app.get("/bike", (req, resp) => {
     })
 });
 
-app.post("/bike", (req, resp) => {
+app.post("/bike", verifica_token, (req, resp) => {
     var bike = req.body;
     console.log("POST - Bike");
 
@@ -44,7 +78,7 @@ app.post("/bike", (req, resp) => {
     });
 });
 
-app.get("/bike/:bikeId", (req, resp) => {
+app.get("/bike/:bikeId", verifica_token, (req, resp) => {
     var bikeId = req.params.bikeId
     console.log("GET - BikeId: " + bikeId);
 
@@ -60,8 +94,8 @@ app.get("/bike/:bikeId", (req, resp) => {
     });
 });
 
-app.put("/bike/:bikeId", (req, resp) => {
-    var bikeId = req.params.bikeId;
+app.put("/bike/:bikeId", verifica_token, (req, resp) => {
+	var bikeId = req.params.bikeId;
     var bike = req.body;
     console.log("PUT - BikeId: " + bikeId);
 
@@ -76,7 +110,7 @@ app.put("/bike/:bikeId", (req, resp) => {
     });
 });
 
-app.delete("/bike/:bikeId", (req, resp) => {
+app.delete("/bike/:bikeId", verifica_token, (req, resp) => {
     var bikeId = req.params.bikeId;
     console.log("DELETE - BikeId: " + bikeId);
 
